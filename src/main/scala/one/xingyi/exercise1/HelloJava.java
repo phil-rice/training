@@ -1,0 +1,8 @@
+package one.xingyi.exercise1;
+
+public class HelloJava {
+
+    public static void main(String[] args) {
+        System.out.println("Hello World");
+    }
+}
