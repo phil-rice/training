@@ -1,5 +1,7 @@
 package one.xingyi.a
 import one.xingyi.exercise2.CharacterD.NonFunctional
+import one.xingyi.exercise2.CharacterD.MetricCounter
+
 import org.mockito.Matchers.anyChar
 import org.mockito.Mockito
 import org.mockito.Mockito.{mock, when}
@@ -30,13 +32,16 @@ class NonFunctionalTest extends AnyFlatSpec with should.Matchers {
   behavior of "Non Functionals - metrics"
 
   it should "return the results of the business logic when called" in {
-    val decoratedBizLogic = NonFunctional.addMatrix(new AtomicInteger())(bizLogic2)
+    val counter = new AtomicInteger()
+    implicit val metricCounter: MetricCounter[String] = () => counter.incrementAndGet
+    val decoratedBizLogic = NonFunctional.addMetrics(bizLogic2)
     decoratedBizLogic("a") shouldBe "a_wascalled"
   }
 
   it should "increment the counter every time the bizlogic is called" in {
     val counter = new AtomicInteger()
-    val decoratedBizLogic = NonFunctional.addMatrix(counter)(bizLogic)
+    implicit val metricCounter: MetricCounter[String] = () => counter.incrementAndGet
+    val decoratedBizLogic = NonFunctional.addMetrics(bizLogic)
     counter.get() shouldBe 0
     decoratedBizLogic("a")
     counter.get shouldBe 1

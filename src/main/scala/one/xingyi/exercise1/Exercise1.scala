@@ -49,16 +49,19 @@ object Attack {
     println(s"attacked for $hp")
     if (hp < 0) ch else if (!ch.alive) ch else {
       val newHitpoints = ch.hp - attack.hp
-      if (newHitpoints < 0) {
-        println(s"and is still alive with $newHitpoints")
-        ch.copy(hp = newHitpoints)
-      } else {
-        println(s"and was killed")
-        Character(0, false)
-      }
+      workOutWhatToDo(ch, newHitpoints)
     }
   }
 
+  private def workOutWhatToDo(ch: Character, newHitpoints: Int) = {
+    if (newHitpoints < 0) {
+      println(s"and is still alive with $newHitpoints")
+      ch.copy(hp = newHitpoints)
+    } else {
+      println(s"and was killed")
+      Character(0, false)
+    }
+  }
 }
 
 

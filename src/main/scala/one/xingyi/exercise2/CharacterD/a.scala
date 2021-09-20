@@ -1,31 +1,57 @@
 package one.xingyi.exercise2.CharacterD
 
+import one.xingyi.exercise2.CharacterD.ErrorStrategy.logAndRollBack
 import one.xingyi.exercise2.CharacterD.NonFunctional._
 
 import java.util.concurrent.atomic.AtomicInteger
 case class Character(health: Int = 100, isAlive: Boolean = true)
-case class Attack(character: Character, damage: Int)
-
 object Character {
-  val counter = new AtomicInteger(0)
   def checkHealth(health: Int): Boolean = if (health >= 0) true else false
 
-  def doDamageWithNonFunctionals: Attack => Character = applyNormalNonFunctional(doDamage, counter, logAndRollBack)(doDamage)
+}
+case class Attack(character: Character, damage: Int)
+case class Heal(character: Character, damage: Int)
+case class PickUpItem(character: Character, itemToPickUp: String)
+
+object Attack {
+  val attackCounter = new AtomicInteger(0)
+  implicit val errorStrategyForAttack: ErrorStrategy[Attack, Character] = logAndRollBack((a: Attack) => a.character) _
+
+  implicit val metricCounterForAttack = new MetricCounter[Attack] {
+    override def apply(): Unit = attackCounter.incrementAndGet()
+  }
+
+  def doDamageWithNonFunctionals: Attack => Character = applyNormalNonFunctional(doDamage) apply (doDamage)
 
   def doDamage(attack: Attack): Character = {
     import attack._
     val updatedHealth = character.health - damage
-    new Character(updatedHealth, checkHealth(updatedHealth))
+    new Character(updatedHealth, Character.checkHealth(updatedHealth))
   }
-  def logAndRollBack(e: Exception, attack: Attack): Character = {
-    println(e)
-    attack.character
-  }
+
 
 }
 
+class ComposeNonFunctionals[From, To](val txs: (From => To) => (From => To)*) extends ((From => To) => (From => To)) {
+  override def apply(bizlogic: From => To): From => To = txs.foldLeft(bizlogic)((acc, v) => v(acc))
+}
+
+trait MetricCounter[T] {
+  def apply()
+}
+
+trait ErrorStrategy[From, To] {
+  def apply(e: Exception, from: From): To
+}
+
+object ErrorStrategy {
+  def logAndRollBack[From, To](rollbackFn: From => To)(e: Exception, from: From): To = {
+    println(e)
+    rollbackFn(from)
+  }
+
+}
 object NonFunctional {
-  type Decorator[From, To] = (From => To) => (From => To)
 
   def addLogging[From, To](fn: From => To): From => To =
     from => {
@@ -34,15 +60,17 @@ object NonFunctional {
       result
     }
 
-  def applyNormalNonFunctional[From, To](fn: From => To, counter: AtomicInteger, errorStrategy: (Exception, From) => To) =
+  def applyNormalNonFunctional[From, To](fn: From => To)(implicit counter: MetricCounter[From], errorStrategy: ErrorStrategy[From, To]) =
     compose[From, To](
       addLogging,
-      addErrorHandling(errorStrategy),
-      addMatrix(counter),
+      addErrorHandling,
+      addMetrics
     )
 
 
-  def compose[From, To](decorators: (From => To) => (From => To)*): (From => To) => (From => To) =
+  type Decorator[From, To] = (From => To) => (From => To)
+
+  def compose[From, To](decorators: Decorator[From, To]*): Decorator[From, To] =
     rawFn => decorators.foldLeft(rawFn)((acc, decorator) => decorator(acc))
 
 
@@ -50,14 +78,14 @@ object NonFunctional {
   //functional composition
 
 
-  def addMatrix[From, To](counter: AtomicInteger)(fn: From => To): From => To =
+  def addMetrics[From, To](fn: From => To)(implicit counter: MetricCounter[From]): From => To =
     from => {
-      counter.incrementAndGet()
+      counter()
       fn(from)
     }
 
 
-  def addErrorHandling[From, To](errorStrategy: (Exception, From) => To)(fn: From => To): From => To =
+  def addErrorHandling[From, To](fn: From => To)(implicit errorStrategy: ErrorStrategy[From, To]): From => To =
     from => {
       try {
         fn(from)
